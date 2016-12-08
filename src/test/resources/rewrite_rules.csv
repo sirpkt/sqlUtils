@@ -1,0 +1,6 @@
+"aBc","tEst","(select * from org.test)"
+"abc","aaa","(select *
+ from xxx)"
+,"bbb","(select * from qqq)"
+"def","test","ghi.testest"
+"테스트","테이블","test.table"
