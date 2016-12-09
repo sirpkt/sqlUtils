@@ -1,17 +1,21 @@
 package com.skt.sql.utils;
 
 import com.google.common.collect.Lists;
+import org.antlr.v4.runtime.ANTLRInputStream;
+import org.antlr.v4.runtime.CommonTokenStream;
 import org.apache.tajo.algebra.Expr;
 import org.apache.tajo.algebra.Relation;
 import org.apache.tajo.exception.SQLSyntaxError;
-import org.apache.tajo.parser.sql.SQLAnalyzer;
+import org.apache.tajo.parser.sql.SQLLexer;
+import org.apache.tajo.parser.sql.SQLParser;
 import org.apache.tajo.parser.sql.SQLParser.Table_primaryContext;
+import org.apache.tajo.parser.sql.SQLParserBaseVisitor;
 import org.apache.tajo.util.Pair;
 
 import java.sql.SQLException;
 import java.util.List;
 
-public class TableLocatingSQLAnalyzer extends SQLAnalyzer
+public class TableLocatingSQLAnalyzer extends SQLParserBaseVisitor<Expr>
 {
   public static String[] getSqlLines(String sql)
   {
@@ -43,7 +47,7 @@ public class TableLocatingSQLAnalyzer extends SQLAnalyzer
     tables = Lists.newArrayList();
 
     try {
-      super.parse(sql);
+      getExpr(sql);
     } catch (SQLSyntaxError e) {
       throw new SQLException(
           e.getMessage()
@@ -53,14 +57,35 @@ public class TableLocatingSQLAnalyzer extends SQLAnalyzer
     return tables;
   }
 
+  private Expr getExpr(String sql) throws SQLSyntaxError
+  {
+    final ANTLRInputStream input = new ANTLRInputStream(sql);
+    final SQLLexer lexer = new SQLLexer(input);
+    lexer.removeErrorListeners();
+    lexer.addErrorListener(new SQLErrorListener());
+
+    final CommonTokenStream tokens = new CommonTokenStream(lexer);
+
+    final SQLParser parser = new SQLParser(tokens);
+    parser.removeErrorListeners();
+    parser.addErrorListener(new SQLErrorListener());
+    parser.setBuildParseTree(true);
+
+    SQLParser.SqlContext context;
+    try {
+      context = parser.sql();
+    } catch (RuntimeException e) {
+      throw new SQLSyntaxError(e.getMessage());
+    }
+
+    return visitSql(context);
+  }
+
   @Override
   public Expr visitTable_primary(Table_primaryContext ctx)
   {
-    Expr expr = super.visitTable_primary(ctx);
-    if (expr.getClass().equals(Relation.class))
-    {
-      Relation relation = (Relation)expr;
-      Pair<String, String> schemaAndName = getSchemaAndName(relation.getName());
+    if (ctx.table_or_query_name() != null) {
+      Pair<String, String> schemaAndName = getSchemaAndName(ctx.table_or_query_name().getText());
       tables.add(
           new TableInfo(
               tables.size() + 1,
@@ -73,9 +98,11 @@ public class TableLocatingSQLAnalyzer extends SQLAnalyzer
               outQuote
           )
       );
+    } else if (ctx.derived_table() != null) {
+      visit(ctx.derived_table().table_subquery());
     }
 
-    return expr;
+    return null;
   }
 
   private Pair<String, String> getSchemaAndName(String tableName)

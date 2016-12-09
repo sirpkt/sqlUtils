@@ -51,7 +51,7 @@ public class TableRewriterFactoryTest
   @Test(expected = SQLException.class)
   public void testSQLError() throws Exception
   {
-    String sql = "SELECT * FRO";
+    String sql = "SELECT * FROM ";
 
     TableRewriterFactory factory =
         new TableRewriterFactory(getClass().getClassLoader().getResource("rewrite_rules.csv").getFile());
